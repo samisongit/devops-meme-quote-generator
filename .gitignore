@@ -1,0 +1,41 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+terraform.tfvars
+terraform.tfvars.json
+
+# Docker
+Dockerfile.*
+docker-compose.override.yml
+
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*~
+.cache
+.pytest_cache/
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+logs/
+*.log
+
+# IDEs
+.vscode/
+.idea

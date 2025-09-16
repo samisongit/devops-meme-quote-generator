@@ -1,0 +1,11 @@
+version: '3.8' # Use a compatible version
+
+services:
+  app:
+    build: .  # Build the image from the Dockerfile in the current directory (.)
+    ports:
+      - "5000:5000" # Map host port 5000 to container port 5000
+    # volumes:  # Optional: Uncomment for live code reloading during development
+    #   - .:/app # Mount the current directory on the host to /app in the container
+    # environment: # Optional: Set environment variables
+    #   - FLASK_ENV=development

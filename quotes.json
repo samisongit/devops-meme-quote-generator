@@ -1,0 +1,12 @@
+[
+    {
+        "id": 1,
+        "text": "Any sufficiently advanced technology is indistinguishable from magic.",
+        "author": "Arthur C. Clarke"
+    },
+    {
+        "id": 2,
+        "text": "Simplicity is prerequisite for reliability.",
+        "author": "Edsger W. Dijkstra"
+    }
+]
