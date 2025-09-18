@@ -53,7 +53,7 @@ jobs:
           context: .
           push: true # Push the image
           # Tag the image with the commit SHA for uniqueness
-          tags: samisongit/devops-meme-quote-generator:${{ github.sha }} # <--- REPLACE YOUR USERNAME
+          tags: samisondocker/devops-meme-quote-generator:${{ github.sha }} # <--- REPLACE YOUR USERNAME
 
   # --- Job: Terraform Plan ---
   terraform-plan:
