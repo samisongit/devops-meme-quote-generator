@@ -155,3 +155,84 @@ jobs:
           echo "EC2_IP=$EC2_IP" >> $GITHUB_ENV
           echo "public_ip_url=http://$EC2_IP:5000" >> $GITHUB_OUTPUT
         working-directory: ./terraform
+
+# --- New Job: Ansible Configure Instance ---
+ansible-configure:
+  name: 'Ansible Configure Instance (Manual Approval Required)'
+  # Run after Terraform apply, on master push or manual dispatch
+  if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+  runs-on: ubuntu-latest
+  needs: [terraform-apply] # Must wait for infrastructure
+
+  # --- Approval Gate using Environment ---
+  environment:
+    name: configure-production # Create this environment in GitHub settings if needed
+    # url: ${{ steps.get_ip.outputs.public_ip_url }} # Optional, if you want a direct link
+
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Setup Python for Ansible
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    # Install Ansible
+    - name: Install Ansible
+      run: |
+        pip install --upgrade pip
+        pip install ansible
+
+    # Configure AWS credentials (might be needed if using dynamic inventory)
+    - name: Configure AWS Credentials (for Ansible EC2 inventory if needed)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1 # Use the same region as your Terraform config
+
+    # --- KEY PART: Setup SSH for Ansible ---
+    # Store the private SSH key in GitHub Secrets (e.g., TF_SSH_PRIVATE_KEY)
+    # It's crucial this secret contains the *private* key content, including
+    # the "-----BEGIN OPENSSH PRIVATE KEY-----" and "-----END OPENSSH PRIVATE KEY-----" lines.
+    - name: Setup SSH Key for Ansible
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.TF_SSH_PRIVATE_KEY }} # Add this secret!
+
+    # Get Terraform Outputs (IP, potentially Image Tag if not using latest)
+    - name: Get Terraform Outputs
+      id: get_outputs
+      run: |
+        cd terraform
+        # Ensure Terraform is initialized to read state from S3 backend
+        terraform init || echo "Terraform init failed, but continuing..."
+        export EC2_IP=$(terraform output -raw ec2_instance_public_ip)
+        if [ -z "$EC2_IP" ]; then
+          echo "ERROR: Could not retrieve EC2 Public IP from Terraform outputs."
+          exit 1
+        fi
+        echo "EC2_IP=$EC2_IP" >> $GITHUB_ENV
+        # Use the commit SHA as the image tag, matching the build-test job
+        # IMPORTANT: Replace 'your-dockerhub-username' with your actual Docker Hub username!
+        export IMAGE_TAG="samisondocker/devops-meme-quote-generator:${{ github.sha }}"
+        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+      # Ensure Terraform is initialized to read state
+
+    # Create a simple Ansible inventory (or use ec2.py dynamic inventory)
+    - name: Create Ansible Inventory
+      run: |
+        mkdir -p ansible/inventory
+        cat > ansible/inventory/hosts <<EOF
+        [web_app_hosts]
+        web_app ansible_host=${{ env.EC2_IP }} ansible_user=ec2-user ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+        EOF
+
+    # Run the Ansible Playbook
+    - name: Run Ansible Playbook
+      run: |
+        cd ansible
+        ansible-playbook -i inventory/hosts configure-web-app.yml \
+          -e "docker_image_tag=${{ env.IMAGE_TAG }} ec2_public_ip=${{ env.EC2_IP }}"
