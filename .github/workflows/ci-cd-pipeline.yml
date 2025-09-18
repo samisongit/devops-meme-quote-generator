@@ -1,3 +1,5 @@
+# .github/workflows/ci-cd-pipeline.yml
+
 name: DevOps Meme/Quote Generator CI/CD Pipeline
 
 on:
@@ -82,9 +84,9 @@ jobs:
         id: plan
         run: |
           terraform plan -no-color -out=tfplan.binary | tee tfplan.txt
-          echo 'TF_PLAN<<EOF' >> $GITHUB_ENV
+          echo "TF_PLAN<<EOF" >> $GITHUB_ENV
           cat tfplan.txt >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
         working-directory: ./terraform
         continue-on-error: true
 
