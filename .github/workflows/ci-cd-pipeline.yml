@@ -65,6 +65,11 @@ jobs:
     # It should only run after the build-test job succeeds
     needs: build-test
 
+    # Define permissions for the GITHUB_TOKEN used in this job
+    permissions:
+      contents: read  # Default for GITHUB_TOKEN, needed to checkout code
+      pull-requests: write # Explicitly grant write permission to PRs for commenting
+
     # Environment variables specific to this job
     env:
       TF_VAR_ssh_key_name: ${{ secrets.TF_SSH_KEY_NAME }} # Pass SSH key name as a TF variable
