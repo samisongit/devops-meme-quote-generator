@@ -1,0 +1,54 @@
+# ansible/configure-web-app.yml
+---
+- name: Configure EC2 Instance and Deploy App
+  hosts: web_app_hosts # This group will be defined in an inventory
+  become: yes # Run tasks with sudo privileges
+  vars:
+    # These variables will be passed in via GitHub Actions
+    # docker_image_tag: "your-dockerhub-username/devops-meme-quote-generator:latest"
+    # ec2_public_ip: "1.2.3.4"
+    app_port: 5000
+
+  tasks:
+    - name: Ensure Docker is installed (Amazon Linux 2023)
+      package:
+        name: docker
+        state: present
+
+    - name: Start Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    # Note: Pulling and running the image might require handling authentication
+    # if it's a private registry. For Docker Hub public repos, this might work.
+    - name: Pull Docker image
+      command: docker pull {{ docker_image_tag }}
+      register: docker_pull_result
+      changed_when: "'Downloaded' in docker_pull_result.stdout or 'Status: Downloaded' in docker_pull_result.stdout or 'Pulling' in docker_pull_result.stdout"
+
+    - name: Run Docker container
+      command: >
+        docker run -d
+        --name meme-quote-app
+        -p {{ app_port }}:{{ app_port }}
+        -e FLASK_ENV=production
+        {{ docker_image_tag }}
+      register: docker_run_result
+      failed_when: "'Error' in docker_run_result.stderr"
+
+    # Optional: Wait for app to be responsive
+    - name: Wait for app to respond
+      uri:
+        url: "http://{{ ec2_public_ip }}:{{ app_port }}/"
+        method: GET
+        status_code: 200
+      retries: 10
+      delay: 10
