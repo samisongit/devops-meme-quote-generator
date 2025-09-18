@@ -3,7 +3,7 @@
 name: DevOps Meme/Quote Generator CI/CD Pipeline
 
 on:
-  # Triggers the workflow on push events to the master branch (for apply job later)
+  # Triggers the workflow on push events to the master branch (for apply job)
   push:
     branches: [ "master" ]
   # Triggers the workflow on pull request events but only for the master branch
@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- Existing Job: Build and Test ---
+  # --- Job: Build and Test ---
   build-test:
     name: 'Build & Test Docker Image'
     runs-on: ubuntu-latest
@@ -53,9 +53,9 @@ jobs:
           context: .
           push: true # Push the image
           # Tag the image with the commit SHA for uniqueness
-          tags: samisondocker/devops-meme-quote-generator:${{ github.sha }} # <--- REPLACE YOUR USERNAME
+          tags: samisongit/devops-meme-quote-generator:${{ github.sha }} # <--- REPLACE YOUR USERNAME
 
-  # --- New Job: Terraform Plan ---
+  # --- Job: Terraform Plan ---
   terraform-plan:
     name: 'Terraform Plan'
     # This job runs only on pull requests
@@ -65,7 +65,7 @@ jobs:
     # It should only run after the build-test job succeeds
     needs: build-test
 
-    # Define permissions for the GITHUB_TOKEN used in this job
+    # Grant necessary permissions for commenting on PRs
     permissions:
       contents: read  # Default for GITHUB_TOKEN, needed to checkout code
       pull-requests: write # Explicitly grant write permission to PRs for commenting
@@ -82,10 +82,8 @@ jobs:
       # Set up Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        # Optionally specify a version: with: terraform_version: 1.5.0
 
       # Configure AWS credentials (needed for Terraform to interact with AWS)
-      # You need to set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets in GitHub
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -96,7 +94,7 @@ jobs:
       # Navigate to the terraform directory and run Terraform commands
       - name: Terraform Init
         run: terraform init
-        working-directory: ./terraform # Specify working directory
+        working-directory: ./terraform
 
       # Terraform Validate
       - name: Terraform Validate
@@ -104,8 +102,6 @@ jobs:
         working-directory: ./terraform
 
       # Terraform Plan
-      # Note: We are NOT using -var for ssh_key_name here because it's set via env TF_VAR_ssh_key_name
-      # The plan output is saved to a file for potential commenting on the PR
       - name: Terraform Plan
         id: plan # Give this step an ID so we can reference its output later
         run: |
@@ -115,12 +111,11 @@ jobs:
         continue-on-error: true
 
       # Post the plan as a comment on the PR
-      # Requires the pull-request-comment token (see below)
       - name: Comment Terraform Plan on PR
         uses: actions/github-script@v7
         if: github.event_name == 'pull_request' # Only run on PRs
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }} # Default token, has PR comment permissions
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
             const planOutput = fs.readFileSync('./terraform/tfplan.txt', 'utf8');
@@ -130,9 +125,60 @@ jobs:
               issue_number: context.issue.number, // PR is an issue in GitHub API
               body: `## Terraform Plan Output\n\`\`\`terraform\n${planOutput}\n\`\`\``
             });
-      # (Optional) Upload the binary plan file as an artifact (useful for apply steps later, requires storage)
-      # - name: Upload Terraform Plan Binary
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: tfplan-binary
-      #     path: ./terraform/tfplan.binary
+
+  # --- Job: Terraform Apply ---
+  terraform-apply:
+    name: 'Terraform Apply (Manual Approval Required)'
+    # This job runs on push to master (e.g., after PR merge) or manual dispatch
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Depends on the build-test job
+    needs: [build-test]
+
+    # --- Approval Gate using Environment ---
+    environment:
+      name: production # Name of the environment (create this in GitHub repo settings)
+      url: ${{ steps.get_ip.outputs.public_ip_url }} # Optional: URL for the deployed app
+
+    env:
+      TF_VAR_ssh_key_name: ${{ secrets.TF_SSH_KEY_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # Navigate to the terraform directory and initialize
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform
+
+      # Terraform Validate
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ./terraform
+
+      # Terraform Apply
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: ./terraform
+
+      # Capture the EC2 IP for later use/validation
+      - name: Get EC2 Public IP
+        id: get_ip # Give this step an ID to reference its output
+        run: |
+          # Use terraform output to get the IP
+          export EC2_IP=$(terraform output -raw ec2_instance_public_ip)
+          echo "EC2_IP=$EC2_IP" >> $GITHUB_ENV
+          # Create a URL output
+          echo "public_ip_url=http://$EC2_IP:5000" >> $GITHUB_OUTPUT
+        working-directory: ./terraform
