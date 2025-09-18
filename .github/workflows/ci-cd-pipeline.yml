@@ -119,10 +119,10 @@ jobs:
           script: |
             const fs = require('fs');
             const planOutput = fs.readFileSync('./terraform/tfplan.txt', 'utf8');
-            const { data: comment } = await github.rest.issues.createComment({
+            const {  comment } = await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number, // PR is an issue in GitHub API
+              issue_number: context.issue.number, # PR is an issue in GitHub API
               body: `## Terraform Plan Output\n\`\`\`terraform\n${planOutput}\n\`\`\``
             });
 
@@ -130,12 +130,14 @@ jobs:
   terraform-apply:
     name: 'Terraform Apply (Manual Approval Required)'
     # This job runs on push to master (e.g., after PR merge) or manual dispatch
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # CORRECTED CONDITION: Added parentheses for clarity and correctness
+    if: (github.ref == 'refs/heads/master' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # Depends on the build-test job
     needs: [build-test]
 
     # --- Approval Gate using Environment ---
+    # YES, this references the 'production' environment you created.
     environment:
       name: production # Name of the environment (create this in GitHub repo settings)
       url: ${{ steps.get_ip.outputs.public_ip_url }} # Optional: URL for the deployed app
