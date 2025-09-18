@@ -83,10 +83,14 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          terraform plan -no-color -out=tfplan.binary | tee tfplan.txt
+          # Run plan and capture output
+          PLAN_OUTPUT=$(terraform plan -no-color 2>&1)
+          # Save to GITHUB_ENV
           echo "TF_PLAN<<EOF" >> $GITHUB_ENV
-          cat tfplan.txt >> $GITHUB_ENV
+          echo "$PLAN_OUTPUT" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
+          # Also save to file for debugging/artifacts
+          echo "$PLAN_OUTPUT" > tfplan.txt
         working-directory: ./terraform
         continue-on-error: true
 
@@ -96,16 +100,14 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const planOutput = process.env.TF_PLAN || "No plan output available.";
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## Terraform Plan Output
-\`\`\`terraform
-${process.env.TF_PLAN}
-\`\`\``
+              body: `## Terraform Plan Output\n\`\`\`hcl\n${planOutput}\n\`\`\``
             });
-
+            
   # --- Job: Terraform Apply ---
   terraform-apply:
     name: 'Terraform Apply (Manual Approval Required)'
