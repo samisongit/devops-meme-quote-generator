@@ -118,7 +118,7 @@ resource "aws_instance" "web_app" {
   vpc_security_group_ids = [aws_security_group.web.id]
 
   # Use the SSH key pair (you need to create this - see next steps/comments)
-  key_name = var.ssh_key_name # Uncomment and set variable when you have an SSH key
+  key_name = "samskey" # Uncomment and set variable when you have an SSH key
 
   # Basic user data script to install Docker (Ansible will configure the app)
   user_data = <<-EOF
