@@ -241,7 +241,6 @@ jobs:
       - name: Get Terraform Outputs
         id: get_outputs
         run: |
-          cd terraform
           # Ensure Terraform is initialized to read state from S3 backend
           terraform init || echo "Terraform init failed, but continuing..."
           export EC2_IP=$(terraform output -raw ec2_instance_public_ip)
